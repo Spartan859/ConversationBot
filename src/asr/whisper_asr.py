@@ -65,11 +65,16 @@ class WhisperASR:
         """列出所有可用模型"""
         return cls.MODELS
     
+    # 简体中文引导提示
+    SIMPLIFIED_CHINESE_PROMPT = "以下是普通话的句子，使用简体中文输出。"
+    
     def transcribe(
         self,
         audio: Union[str, np.ndarray],
         language: Optional[str] = None,
         task: str = "transcribe",
+        initial_prompt: Optional[str] = None,
+        use_simplified_chinese: bool = True,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -79,23 +84,31 @@ class WhisperASR:
             audio: 音频文件路径或numpy数组
             language: 语言代码 (zh/en/ja等)，None则自动检测
             task: 任务类型 (transcribe=转录 / translate=翻译成英文)
+            initial_prompt: 初始提示文本，引导模型输出风格
+            use_simplified_chinese: 是否使用简体中文提示（language="zh"时生效）
             **kwargs: 其他Whisper参数
             
         Returns:
             识别结果字典，包含 text, segments, language 等
         """
-        print(f"🎯 开始语音识别...")
+        print(f"[ASR] 开始语音识别...")
         start_time = time.time()
         
         # 如果是numpy数组，确保是float32类型
         if isinstance(audio, np.ndarray):
             audio = audio.astype(np.float32)
         
+        # 设置 initial_prompt
+        prompt = initial_prompt
+        if prompt is None and language == "zh" and use_simplified_chinese:
+            prompt = self.SIMPLIFIED_CHINESE_PROMPT
+        
         # 执行识别
         result = self.model.transcribe(
             audio,
             language=language,
             task=task,
+            initial_prompt=prompt,
             **kwargs
         )
         
@@ -187,7 +200,7 @@ class WhisperASR:
 # 测试代码
 if __name__ == "__main__":
     # 初始化ASR
-    asr = WhisperASR(model_name="base")
+    asr = WhisperASR(model_name="large-v3")
     
     # 打印设备信息
     print("\n设备信息:")
