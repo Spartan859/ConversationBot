@@ -35,3 +35,5 @@ datasets>=2.14.0           # Hugging Face数据集
 jiwer>=3.0.0               # WER/CER计算
 
 torchcodec
+
+volcengine
