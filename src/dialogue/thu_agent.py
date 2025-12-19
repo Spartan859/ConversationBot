@@ -21,9 +21,9 @@ class ThuAssistantAgent:
     
     # 默认的 System Prompt
     DEFAULT_BASE_PROMPT = """# 任务
-你是一位清华大学的辅导员，你的首要任务是帮学生一步步解决他提出的问题。
+你是一位清华大学的辅导员，你的首要任务是用简短的语言帮学生解决他提出的问题。
 
-你需要保证输出的回复为口语，文风需要适合直接说出来。
+你需要保证输出的回复为简洁的口语，纯文本，需要适合用TTS模型转换为语音。
 
 你需要根据「参考资料」来回答接下来的「用户问题」，这些信息在 <context></context> XML tags 之内。
 
@@ -323,7 +323,8 @@ class ThuAssistantAgent:
         image_query: Optional[str] = None,
         max_tokens: int = 32768,
         temperature: float = 1.0,
-        post_process: bool = False
+        post_process: bool = False,
+        enable_thinking: bool = True
     ) -> str:
         """
         完整的 RAG 查询流程
@@ -334,6 +335,7 @@ class ThuAssistantAgent:
             max_tokens: 最大 token 数
             temperature: 温度参数
             post_process: 是否后处理为纯文本（去除 Markdown 标记，适合 TTS）
+            enable_thinking: 是否启用思考模式（默认启用）
             
         Returns:
             Agent 的回答（Markdown 格式或纯文本）
@@ -365,7 +367,8 @@ class ThuAssistantAgent:
         response = self.chat_completion(
             messages, 
             max_tokens=max_tokens, 
-            temperature=temperature
+            temperature=temperature,
+            enable_thinking=enable_thinking
         )
         
         # 5. 后处理（如果需要）

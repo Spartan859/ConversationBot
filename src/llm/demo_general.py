@@ -10,16 +10,16 @@ client = OpenAI(
 )
 
 response = client.responses.create(
-    model="ep-20251219211834-fxjqq",
+    model="deepseek-v3-1-250821",
     input=[
         {
             "role": "user",
             "content": [
 
-                {
-                    "type": "input_image",
-                    "image_url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/ark_demo_img_1.png"
-                },
+                # {
+                #     "type": "input_image",
+                #     "image_url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/ark_demo_img_1.png"
+                # },
                 {
                     "type": "input_text",
                     "text": "你看见了什么？"

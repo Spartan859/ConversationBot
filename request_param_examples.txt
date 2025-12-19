@@ -1,0 +1,50 @@
+request_params = {
+        "messages": message,
+        "stream": True,
+        "return_token_usage": True,
+        "model": "Doubao-seed-1-6",
+        "max_tokens": 32768,
+        "temperature": 1,
+        "model_version": "251015",
+        "thinking": {
+             "type":"enabled"
+        }
+    }
+
+request_params = {
+        "messages": message,
+        "stream": True,
+        "return_token_usage": True,
+        "model": "Doubao-seed-1-6-flash",
+        "max_tokens": 32768,
+        "temperature": 1,
+        "model_version": "250828",
+        "thinking": {
+             "type":"enabled"
+        }
+    }
+
+request_params = {
+        "messages": message,
+        "stream": True,
+        "return_token_usage": True,
+        "model": "Doubao-seed-1-6-thinking",
+        "max_tokens": 32768,
+        "temperature": NaN,
+        "model_version": "250715"
+    }
+
+
+
+request_params = {
+        "messages": message,
+        "stream": True,
+        "return_token_usage": True,
+        "model": "Deepseek-v3-1",
+        "max_tokens": 32768,
+        "temperature": 1,
+        "model_version": "250821",
+        "thinking": {
+             "type":"enabled"
+        }
+    }

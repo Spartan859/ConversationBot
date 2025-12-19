@@ -129,7 +129,7 @@ class GeneralAgent:
             "max_output_tokens": self.max_output_tokens,
         }
         if self.enable_thinking:
-            params["thinking"] = {"type": "enabled"}
+            params["extra_body"] = {"thinking": {"type": "enabled"}}
 
         response = self.client.responses.create(**params)
         text = self._extract_text(response)

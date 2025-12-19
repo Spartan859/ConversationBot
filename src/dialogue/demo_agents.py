@@ -12,7 +12,7 @@ from .thu_agent import ThuAssistantAgent
 
 def run_general_agent():
     api_key = os.getenv("ARK_API_KEY", "")
-    agent = GeneralAgent(api_key=api_key)
+    agent = GeneralAgent(api_key=api_key,enable_thinking=True)
 
     print("=" * 80)
     print("GeneralAgent 文本示例")
@@ -65,8 +65,8 @@ def run_thu_agent():
 
 
 def main():
-    run_general_agent()
-    # run_thu_agent()
+    # run_general_agent()
+    run_thu_agent()
 
 
 if __name__ == "__main__":
