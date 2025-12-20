@@ -21,9 +21,9 @@ class ThuAssistantAgent:
     
     # 默认的 System Prompt
     DEFAULT_BASE_PROMPT = """# 任务
-你是一位清华大学的辅导员，你的首要任务是用简短的语言帮学生解决他提出的问题。
+你是一个“清华本科学习助手”语音对话机器人，你的首要任务是帮学生解决他提出的问题。
 
-你需要保证输出的回复为简洁的口语，纯文本，需要适合用TTS模型转换为语音。
+你需要保证输出的回复为简洁的口语化表达，纯文本，需要适合用TTS模型转换为语音。
 
 你需要根据「参考资料」来回答接下来的「用户问题」，这些信息在 <context></context> XML tags 之内。
 
@@ -39,7 +39,7 @@ class ThuAssistantAgent:
         ak: str,
         sk: str,
         account_id: str,
-        collection_name: str = "thu",
+        collection_name: str = "thu_ai_helper",
         project_name: str = "default",
         model: str = "Deepseek-v3-1",
         model_version: str = "250821",
@@ -376,11 +376,17 @@ class ThuAssistantAgent:
             # 提取实际回答内容（处理流式响应）
             try:
                 response_data = json.loads(response)
+                # print(response_data)
                 if "choices" in response_data and len(response_data["choices"]) > 0:
                     content = response_data["choices"][0].get("message", {}).get("content", "")
                     # 转换为纯文本
                     content = markdown_to_speech_text(content)
                     return content
+                # print(response_data.get("data", {}))
+                answer = response_data.get("data", {}).get("generated_answer", None)
+                # print(answer)
+                if answer:
+                    return markdown_to_speech_text(answer)
             except json.JSONDecodeError:
                 pass
             

@@ -4,6 +4,10 @@
 """
 
 import numpy as np
+import tempfile
+import shutil
+import subprocess
+import os
 import sounddevice as sd
 import threading
 import queue
@@ -220,6 +224,7 @@ class RealtimeASR:
         print(f"[OK] 模型加载完成！耗时: {load_time:.2f}秒")
     
     def _transcribe(self, audio: np.ndarray) -> str:
+        print("进入_trasncribe")
         """执行识别"""
         if len(audio) < self.sample_rate * 0.3:  # 少于0.3秒不识别
             return ""
@@ -247,6 +252,114 @@ class RealtimeASR:
             text = result['text']
         
         return text.strip()
+
+    def _resample_audio(self, audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+        """重采样音频：
+
+        优先使用 scipy.signal.resample_poly（效率高、抗伪影好），若不可用则回退到 librosa.resample。
+        返回值为 float32 numpy 数组，长度大约为 target_sr / orig_sr * len(audio)。
+        """
+        # 优先使用 scipy 的 resample_poly（避免 STFT 的相位问题）
+        try:
+            import scipy.signal as sps
+            from math import gcd
+            g = gcd(orig_sr, target_sr)
+            up = target_sr // g
+            down = orig_sr // g
+            audio = audio.astype(np.float32)
+            res = sps.resample_poly(audio, up, down)
+            return res
+        except Exception:
+            try:
+                import librosa
+                return librosa.resample(audio, orig_sr=orig_sr, target_sr=target_sr)
+            except Exception:
+                raise RuntimeError("需要 scipy 或 librosa 进行重采样，请安装 scipy 或 librosa")
+
+    def transcribe(self, source) -> str:
+        """兼容接口：接受文件路径（str）、(sample_rate, np.array) 或 numpy 数组并返回识别文本
+
+        - 如果是文件路径，会使用 soundfile 读取并在需要时用 librosa 重采样
+        - 如果是 (sr, array) 元组，会根据实例的 sample_rate 进行重采样（如需）
+        - 如果是 numpy 数组，则视为已经是目标采样率的数据
+        """
+        try:
+            # 文件路径
+            if isinstance(source, str):
+                import soundfile as sf
+                orig_path = source
+                audio, sr = sf.read(orig_path, dtype='float32')
+                print(f"读取音频采样率: {sr}, 目标采样率: {self.sample_rate}")
+                if audio.ndim > 1:
+                    print(f"输入音频有 {audio.shape[1]} 个通道，已转换为单声道")
+                    audio = np.mean(audio, axis=1)
+                
+                if sr != self.sample_rate:
+                    # 优先使用系统 ffmpeg 进行快速重采样
+                    ffmpeg_exe = shutil.which("ffmpeg")
+                    if ffmpeg_exe:
+                        print("使用 ffmpeg 进行快速重采样...")
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmpf:
+                            tmp_out = tmpf.name
+                        try:
+                            # -ar 采样率, -ac 声道, -sample_fmt f32 保持 float32
+                            subprocess.run(
+                                [ffmpeg_exe, '-y', '-i', orig_path, '-ar', str(self.sample_rate), '-ac', '1', tmp_out],
+                                check=True,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                            audio, sr = sf.read(tmp_out, dtype='float32')
+                        finally:
+                            try:
+                                os.remove(tmp_out)
+                            except Exception:
+                                pass
+                    else:
+                        print("正在重采样音频...")
+                        audio = self._resample_audio(audio, sr, self.sample_rate)
+            # Gradio 返回的 (sr, array)
+            elif isinstance(source, tuple) or isinstance(source, list):
+                sr, audio = source
+                audio = np.asarray(audio, dtype=np.float32)
+                if sr != self.sample_rate:
+                    # 如果系统有 ffmpeg，先写临时 wav 再用 ffmpeg 转换
+                    ffmpeg_exe = shutil.which("ffmpeg")
+                    if ffmpeg_exe:
+                        print("使用 ffmpeg 进行快速重采样 (临时文件)...")
+                        import soundfile as sf
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_in:
+                            in_path = tmp_in.name
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_out:
+                            out_path = tmp_out.name
+                        try:
+                            sf.write(in_path, audio, sr, format='WAV')
+                            subprocess.run(
+                                [ffmpeg_exe, '-y', '-i', in_path, '-ar', str(self.sample_rate), '-ac', '1', '-acodec', 'pcm_s16le', out_path],
+                                check=True,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                            audio, _ = sf.read(out_path, dtype='float32')
+                        finally:
+                            for p in (in_path, out_path):
+                                try:
+                                    os.remove(p)
+                                except Exception:
+                                    pass
+                    else:
+                        print("正在重采样音频...")
+                        audio = self._resample_audio(audio, sr, self.sample_rate)
+            # numpy 数组
+            elif isinstance(source, np.ndarray):
+                audio = source.astype(np.float32)
+            else:
+                raise ValueError("Unsupported audio source type for transcribe()")
+
+            return self._transcribe(audio)
+        except Exception as e:
+            print(f"[Error] transcribe 失败: {e}")
+            return ""
     
     def _calculate_energy(self, audio: np.ndarray) -> float:
         """计算音频能量（用于VAD）"""
@@ -260,12 +373,18 @@ class RealtimeASR:
             self.audio_queue.put(indata.copy())
     
     def _setup_signal_handler(self):
-        """设置信号处理器"""
+        """设置信号处理器（只在主线程注册）"""
+        # signal.signal 只能在主线程注册，否则会抛出 ValueError
+        import threading
+        if threading.current_thread() is not threading.main_thread():
+            print("[Warning] 信号处理器只能在主线程注册，跳过信号注册（在子线程中运行）")
+            return
+
         def signal_handler(signum, frame):
             print("\n\n[Stop] 收到停止信号，正在退出...")
             self.stop()
             sys.exit(0)
-        
+
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
