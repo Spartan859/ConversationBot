@@ -1,5 +1,6 @@
 # 语音对话系统 - 大作业报告
 ---
+2023011002 自35 李翔宇
 
 ## 项目概述
 
@@ -14,7 +15,7 @@
 
      ┌──────────┐      ┌──────────┐      ┌──────────┐
      │   ASR    │      │ Dialogue │      │   TTS    │
-     │ (Whisper)│ ──▶  │  (LLM)   │ ──▶  │(Edge-TTS)│
+     │ (Whisper)│ ──▶ │  (LLM)   │ ──▶│(GPT-SoVITS)│
      └──────────┘      └──────────┘      └──────────┘
           ▲                 │                 │
           │                 ▼                 ▼
@@ -2624,9 +2625,58 @@ gr.Blocks(theme=gr.themes.Glass())  # 可选: Soft, Glass, Monochrome
 ---
 
 ## 总结与感悟
+本项目搭建并验证了一个端到端的语音对话原型，覆盖从语音识别（ASR）、对话生成（Dialogue）到语音合成（TTS）的完整链路。实现上遵循模块化设计，使各模块可以独立替换与调试：
 
+- 核心成果：完成 ASR（基于 faster-whisper）、对话路由、以及与 GPT-SoVITS TTS 服务的对接；实现模型动态选择、音频上传/录音输入、结果展示与对话历史保存。
+- 关键问题与解决思路：通过使用 ffmpeg/soundfile 加速音频预处理、引入数字格式后处理（阿拉伯数字 ↔ 中文数字），以及在模型选择上权衡实时性与准确性，显著提升了系统的健壮性与可用性。
+- 工程教训：实时流式交互虽然提升体验，但会带来并发与状态同步复杂性。优先保证按需处理流程的稳定性更利于迭代与调试；良好的日志、状态反馈与边界条件处理能极大降低运维成本。
+
+### 评估测试与对比分析
+
+在开发过程中，我们开展了一系列评估测试与对比实验，以量化各模块的性能并指导工程取舍：
+
+- ASR 基准测试：在 AISHELL-1 上测量了各型号的 CER 与 RTF（见上文表格），结果显示 large-v3 在准确率上优于小模型（CER 最低），但在实时场景中 `base` / `small` 在 RTF 与可用性上更优，适合在线对话部署。
+
+- faster-whisper vs openai-whisper：faster-whisper 在推理速度上有显著优势（加速数倍），因此作为实时识别主选；openai-whisper 可作为精度参考但延迟较高。
+
+- TTS 延迟对比：通过多段文本测试，TTS 合成时间随文本长度近似线性增长（本项目测得范围约 3–8 秒），短句合成延迟可接受，中长文本建议分段或异步合成以改善交互体验。
+
+- 端到端延迟：在默认配置下（base/small ASR + 网络化 LLM + GPT-SoVITS TTS），端到端响应时间通常在 6–16 秒区间，影响因素主要为模型选择、网络延迟与 TTS 文本长度。
+
+- VAD 与噪声鲁棒性测试：通过对比不同 VAD 阈值和静默判定时长，选择更高的阈值和略长的静默时长可以显著降低误触发率，兼顾识别召回。
+
+- 文本后处理效果验证：引入阿拉伯数字 ↔ 中文数字转换后对若干样本进行对比，示例见上文，后处理在特定任务（如年代、数量）上能显著降低表面错误，提升可读性与下游评估指标。
+
+- 音频预处理与兼容性：使用 `ffmpeg` / `soundfile` 做重采样与格式转换，提高了对多种输入文件的兼容性与处理速度；在多设备（Windows、主流浏览器）上验证了录音/播放链路的稳定性。
+
+- 稳定性与失败模式分析：进行了长时间压力测试与异常注入（TTS 服务断连、模型加载失败、设备变更），并基于结果改进了错误提示、重试策略与资源释放逻辑。
+
+以上评估与对比为工程决策提供了数据支撑：在保证体验的前提下优先选择延迟更低的组件（如 faster-whisper、较小的 ASR 模型），并通过后处理与参数调优弥补精度损失。
+
+未来方向展望：
+
+1. 在保证稳定性的前提下，逐步引入流式/并发能力，并用明确的状态机或队列机制管理并发请求。
+2. 将知识库（如 KdConv）以向量检索方式接入，采用 RAG 策略提升领域问答质量。
+3. 优化延迟（模型量化、推理加速、音频缓存）并扩展 TTS 的多说话人/少样本克隆能力。
+
+总体而言，本项目达成了工程可运行且易于扩展的原型目标，为后续深入优化与功能扩展打下了良好基础。
 
 ---
 
 ## 参考资料
+
+- OpenAI Whisper (原始论文与代码)：https://github.com/openai/whisper
+- faster-whisper（Whisper 的推理加速实现）：https://github.com/guillaumekln/faster-whisper
+- GPT-SoVITS-V4-Inference（TTS 服务实现，项目中使用的 TTS 接口）：https://github.com/RVC-Boss/GPT-SoVITS-V4-Inference
+- SoVITS-SVC / VITS（语音合成与声码器相关项目）：https://github.com/jaywalnut310/vits
+- KdConv（清华 CoAI 的知识驱动对话数据集）：https://github.com/thu-coai/KdConv
+- AISHELL-1（中文语音识别评估数据集）：https://www.openslr.org/33/
+- FunASR（阿里开源的语音识别工具链）：https://github.com/alibaba-damo-academy/FunASR
+- Gradio（快速构建 Web UI）：https://gradio.app
+- ffmpeg（音频处理与转码工具）：https://ffmpeg.org
+- soundfile（Python 音频读写库）：https://pysoundfile.readthedocs.io
+- librosa（音频特征与处理库）：https://librosa.org
+- Hugging Face（模型与数据集托管）：https://huggingface.co
+- Edge-TTS（微软 Edge 的 TTS 客户端实现）：https://github.com/rany2/edge-tts
+
 
